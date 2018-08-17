@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -11,16 +12,16 @@ import (
 	"time"
 
 	"github.com/bluele/slack"
-	"github.com/globalsign/mgo"
-	"github.com/globalsign/mgo/bson"
+	"github.com/mongodb/mongo-go-driver/mongo"
+	"github.com/mongodb/mongo-go-driver/mongo/clientopt"
 	"github.com/qmerce/adstxt"
 )
 
 var (
-	mongo        = flag.String("mongo-url", os.Getenv("MONGODB_URL"), "mongodb url")
+	mongoURL     = flag.String("mongo-url", os.Getenv("MONGODB_URL"), "mongodb url")
 	dbSeed       = flag.Bool("db-seed", false, "run db seed of ads.txt file")
 	slackToken   = flag.String("slack-token", os.Getenv("SLACK_TOKEN"), "slack api token")
-	slackChannel = flag.String("slack-channel", "ads-txt-crawler", "slack api token")
+	slackChannel = flag.String("slack-channel", "ads-txt-crawler", "slack channel")
 	bulk         = flag.Int("bulk", 100, "bulk size to crawl")
 )
 
@@ -32,7 +33,7 @@ const (
 var client *http.Client
 
 func init() {
-	client = &http.Client{Timeout: 5 * time.Second}
+	client = &http.Client{Timeout: 10 * time.Second}
 }
 
 // GetDomain crawls URL and returns a slice of Records
@@ -57,32 +58,24 @@ type AdsTXTFile struct {
 
 func main() {
 	flag.Parse()
-	dialInfo, err := mgo.ParseURL(*mongo)
+
+	ctx := context.Background()
+	db, err := mongo.Connect(ctx, *mongoURL, clientopt.ServerSelectionTimeout(5*time.Minute))
 	if err != nil {
 		log.Fatalf("could not connect to db: %v", err)
 	}
+	defer db.Disconnect(ctx)
 
-	// dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
-	// 	conn, err := tls.Dial("tcp", addr.String(), &tls.Config{})
-	// 	return conn, err
-	// }
-
-	db, err := mgo.DialWithInfo(dialInfo)
-	if err != nil {
-		log.Fatalf("could not connect to db: %v", err)
-	}
-	defer db.Close()
-
-	c := db.DB("").C("adstxt")
+	c := db.Database("adstxt").Collection("adstxt")
 	if *dbSeed {
-		if err = seed(c); err != nil {
+		if err = seed(ctx, c); err != nil {
 			log.Fatalf("failed seeding: %v", err)
 		}
 		os.Exit(0)
 	}
 
 	var doc AdsTXTFile
-	if err := c.Find(bson.M{"_id": "ads_txt_file"}).One(&doc); err != nil {
+	if err := c.FindOne(ctx, map[string]string{"_id": "ads_txt_file"}).Decode(&doc); err != nil {
 		log.Fatalf("could not get adstxt from db: %v", err)
 	}
 
@@ -93,44 +86,43 @@ func main() {
 		log.Fatalf("could not get ads.txt from db: %v", err)
 	}
 
-	// var wg sync.WaitGroup
-	// res := make(chan string, len(doc.Domains))
+	log.Println("launch worker")
 	var res []string
+	ch := make(chan string, len(doc.Domains))
+	go func() {
+		for msg := range ch {
+			res = append(res, msg)
+		}
+	}()
+
+	log.Println("scrape ads.txt from domain list")
 	for i, domain := range doc.Domains {
-		// wg.Add(len(ads))
-		go find(domain, ads, res)
+		go find(domain, ads, ch)
 		if i%*bulk == 0 {
 			time.Sleep(30 * time.Second)
 		}
 	}
 
-	// var out []string
-	// go func() {
-	// 	for msg := range res {
-	// 		out = append(out, msg)
-	// wg.Done()
-	// }
-	// }()
-	// wg.Wait()
-	send(*slackToken, *slackChannel, strings.Join(res, "\n"))
+	file := strings.Join(res, "\n")
+	log.Println("send result csv to slack")
+	if err = send(*slackToken, *slackChannel, file); err != nil {
+		log.Fatalf("could not upload file to slack: %v", err)
+	}
 }
 
 // func find(domain string, src []adstxt.Record, res chan string) {
-func find(domain string, src []adstxt.Record, res []string) {
+func find(domain string, src []adstxt.Record, ch chan string) {
 	dst, err := GetDomain(domain)
 	if err != nil {
-		log.Printf("could not crawl domain %s: %v", domain, err)
-		// res <- fmt.Sprintf("%s, %q, failed", domain, err)
-		res = append(res, fmt.Sprintf("%s, %q, failed", domain, err))
+		log.Printf("error: %v", err)
+		ch <- fmt.Sprintf("%s, %q, failed", domain, err)
 	}
 	for _, v := range src {
 		if match(dst, v) {
-			// res <- fmt.Sprintf("%s, \"%s, %s\", 1", domain, v.ExchangeDomain, v.PublisherAccountID)
-			res = append(res, fmt.Sprintf("%s, \"%s, %s\", 1", domain, v.ExchangeDomain, v.PublisherAccountID))
+			ch <- fmt.Sprintf("%s, \"%s, %s\", 1", domain, v.ExchangeDomain, v.PublisherAccountID)
 			continue
 		}
-		// res <- fmt.Sprintf("%s, \"%s, %s\", 0", domain, v.ExchangeDomain, v.PublisherAccountID)
-		res = append(res, fmt.Sprintf("%s, \"%s, %s\", 0", domain, v.ExchangeDomain, v.PublisherAccountID))
+		ch <- fmt.Sprintf("%s, \"%s, %s\", 0", domain, v.ExchangeDomain, v.PublisherAccountID)
 	}
 }
 

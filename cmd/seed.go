@@ -1,17 +1,18 @@
 package main
 
 import (
+	"context"
 	"io/ioutil"
 
-	"github.com/globalsign/mgo"
+	"github.com/mongodb/mongo-go-driver/mongo"
 )
 
-func seed(db *mgo.Collection) error {
+func seed(ctx context.Context, db *mongo.Collection) error {
 	f, err := ioutil.ReadFile("./ads.txt")
 	if err != nil {
 		return err
 	}
-	return db.Insert(AdsTXTFile{ID: "ads_txt_file", File: string(f), Domains: []string{
+	_, err = db.InsertOne(ctx, AdsTXTFile{ID: "ads_txt_file", File: string(f), Domains: []string{
 		"people.com",
 		"allkpop.com",
 		"asianfanfics.com",
@@ -1273,4 +1274,5 @@ func seed(db *mgo.Collection) error {
 		"worldtimeserver.com",
 		"Zeldadungeon.net",
 	}})
+	return err
 }
