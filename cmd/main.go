@@ -102,7 +102,7 @@ func main() {
 		wg.Add(1)
 		go find(domain, ads, ch, wg)
 		if i%*bulk == 0 {
-			time.Sleep(30 * time.Second)
+			wg.Wait()
 		}
 	}
 	wg.Wait()
