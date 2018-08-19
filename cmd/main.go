@@ -61,7 +61,7 @@ func main() {
 	}
 	defer db.Disconnect(ctx)
 
-	c := db.Database("adstxt").Collection("adstxt")
+	c := db.Database("campaign-api").Collection("adstxt")
 	if *dbSeed {
 		if err = seed(ctx, c); err != nil {
 			log.Fatalf("failed seeding: %v", err)
