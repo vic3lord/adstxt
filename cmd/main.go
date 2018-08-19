@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bluele/slack"
@@ -87,7 +88,7 @@ func main() {
 	}
 
 	log.Println("launch worker")
-	var res []string
+	res := []string{"domain, exchange, status"}
 	ch := make(chan string, len(doc.Domains))
 	go func() {
 		for msg := range ch {
@@ -96,12 +97,16 @@ func main() {
 	}()
 
 	log.Println("scrape ads.txt from domain list")
+	wg := new(sync.WaitGroup)
 	for i, domain := range doc.Domains {
-		go find(domain, ads, ch)
+		wg.Add(1)
+		go find(domain, ads, ch, wg)
 		if i%*bulk == 0 {
 			time.Sleep(30 * time.Second)
 		}
 	}
+	wg.Wait()
+	close(ch)
 
 	file := strings.Join(res, "\n")
 	log.Println("send result csv to slack")
@@ -111,18 +116,20 @@ func main() {
 }
 
 // func find(domain string, src []adstxt.Record, res chan string) {
-func find(domain string, src []adstxt.Record, ch chan string) {
+func find(domain string, src []adstxt.Record, ch chan string, wg *sync.WaitGroup) {
+	defer wg.Done()
 	dst, err := GetDomain(domain)
 	if err != nil {
 		log.Printf("error: %v", err)
-		ch <- fmt.Sprintf("%s, %q, failed", domain, err)
+		ch <- fmt.Sprintf("%q, %q, %q", domain, err, "failed")
 	}
 	for _, v := range src {
+		exchange := fmt.Sprintf("%s, %s", v.ExchangeDomain, v.PublisherAccountID)
 		if match(dst, v) {
-			ch <- fmt.Sprintf("%s, \"%s, %s\", 1", domain, v.ExchangeDomain, v.PublisherAccountID)
+			ch <- fmt.Sprintf("%q, %q, %q", domain, exchange, "1")
 			continue
 		}
-		ch <- fmt.Sprintf("%s, \"%s, %s\", 0", domain, v.ExchangeDomain, v.PublisherAccountID)
+		ch <- fmt.Sprintf("%q, %q, %q", domain, exchange, "0")
 	}
 }
 
