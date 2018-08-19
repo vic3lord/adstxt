@@ -10,11 +10,9 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/bluele/slack"
 	"github.com/mongodb/mongo-go-driver/mongo"
-	"github.com/mongodb/mongo-go-driver/mongo/clientopt"
 	"github.com/qmerce/adstxt"
 )
 
@@ -55,7 +53,7 @@ func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	db, err := mongo.Connect(ctx, *mongoURL, clientopt.ServerSelectionTimeout(5*time.Minute))
+	db, err := mongo.Connect(ctx, *mongoURL)
 	if err != nil {
 		log.Fatalf("could not connect to db: %v", err)
 	}
