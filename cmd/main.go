@@ -31,17 +31,11 @@ const (
 	path  = "/ads.txt"
 )
 
-var client *http.Client
-
-func init() {
-	client = &http.Client{Timeout: 10 * time.Second}
-}
-
 // GetDomain crawls URL and returns a slice of Records
 func GetDomain(domain string) ([]adstxt.Record, error) {
-	resp, err := client.Get(proto + domain + path)
+	resp, err := http.Get(proto + domain + path)
 	if err != nil {
-		resp, err = client.Get("http://" + domain + path)
+		resp, err = http.Get("http://" + domain + path)
 		if err != nil {
 			return nil, err
 		}
