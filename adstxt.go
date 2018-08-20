@@ -62,7 +62,7 @@ func parseRow(row string) (Record, error) {
 	r.ExchangeDomain = sanitize(fields[0])
 	r.PublisherAccountID = sanitize(fields[1])
 
-	if len(fields) > 2 {
+	if len(fields) >= 3 {
 		r.AccountType = parseAccountType(fields[2])
 	}
 
@@ -78,9 +78,6 @@ func Parse(in io.Reader) ([]Record, error) {
 	records := make([]Record, 0)
 	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
-		// if []rune(scanner.Text())[0] == '#' {
-		// 	continue
-		// }
 		r, err := parseRow(scanner.Text())
 		if err != nil {
 			return nil, err
@@ -90,8 +87,5 @@ func Parse(in io.Reader) ([]Record, error) {
 		}
 		records = append(records, r)
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return records, nil
+	return records, scanner.Err()
 }
