@@ -1,4 +1,4 @@
 FROM alpine:edge
 RUN apk add --no-cache ca-certificates
-COPY cmd /adstxt
+COPY adstxt /adstxt
 CMD ["/adstxt"]
