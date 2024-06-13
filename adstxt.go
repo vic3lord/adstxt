@@ -8,31 +8,35 @@ import (
 	"strings"
 )
 
-// Record is ads.txt data field defined in iab.
-type Record struct {
-	// ExchangeDomain is domain name of the advertising system
-	ExchangeDomain string
-
-	// PublisherAccountID is the identifier associated with the seller
-	// or reseller account within the advertising system.
-	PublisherAccountID string
-
-	// AccountType is an enumeration of the type of account.
-	AccountType AccountType
-
-	// AuthorityID is an ID that uniquely identifies the advertising system
-	// within a certification authority.
-	AuthorityID string
-}
-
 // AccountType specify account enum
 type AccountType int
 
 const (
-	AccountDirect AccountType = iota
-	AccountReseller
-	AccountOther
+	AccountTypeUnknown AccountType = iota
+	AccountTypeDirect
+	AccountTypeReseller
 )
+
+func (a AccountType) String() string {
+	return [...]string{"direct", "reseller"}[a]
+}
+
+// Record is ads.txt data field defined in iab.
+type Record struct {
+	// ExchangeDomain is domain name of the advertising system
+	ExchangeDomain string `json:"exchange_domain"`
+
+	// PublisherAccountID is the identifier associated with the seller
+	// or reseller account within the advertising system.
+	PublisherAccountID string `json:"publisher_account_id"`
+
+	// AccountType is an enumeration of the type of account.
+	AccountType AccountType `json:"account_type"`
+
+	// AuthorityID is an ID that uniquely identifies the advertising system
+	// within a certification authority.
+	AuthorityID string `json:"authority_id"`
+}
 
 // Parse takes a text and returns a slice of Records
 func Parse(in io.Reader) ([]Record, error) {
@@ -61,17 +65,6 @@ func ParseFromURL(url string) ([]Record, error) {
 	return Parse(resp.Body)
 }
 
-func parseAccountType(s string) AccountType {
-	switch s {
-	case "direct":
-		return AccountDirect
-	case "reseller":
-		return AccountReseller
-	default:
-		return AccountOther
-	}
-}
-
 func parseRow(row string) (Record, error) {
 	comment := strings.Index(row, "#")
 	if comment != -1 {
@@ -83,17 +76,35 @@ func parseRow(row string) (Record, error) {
 		return Record{}, nil
 	}
 
+	for i := range fields {
+		fields[i] = strings.ToLower(strings.TrimSpace(fields[i]))
+	}
+
 	var r Record
-	r.ExchangeDomain = strings.ToLower(fields[0])
-	r.PublisherAccountID = strings.ToLower(fields[1])
+	r.ExchangeDomain = fields[0]
+	r.PublisherAccountID = fields[1]
 
 	if len(fields) >= 3 {
-		r.AccountType = parseAccountType(strings.ToLower(fields[2]))
+		accountType := parseAccountType(fields[2])
+		if accountType == AccountTypeUnknown {
+			return r, fmt.Errorf("account type is %q and must be (DIRECT or RESELLER)", fields[2])
+		}
+		r.AccountType = accountType
 	}
 
 	// AuthorityID is optional
 	if len(fields) == 4 {
-		r.AuthorityID = strings.ToLower(fields[3])
+		r.AuthorityID = fields[3]
 	}
 	return r, nil
+}
+
+func parseAccountType(s string) AccountType {
+	switch s {
+	case "direct":
+		return AccountTypeDirect
+	case "reseller":
+		return AccountTypeReseller
+	}
+	return AccountTypeUnknown
 }
