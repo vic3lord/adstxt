@@ -8,19 +8,6 @@ import (
 	"strings"
 )
 
-// AccountType specify account enum
-type AccountType int
-
-const (
-	AccountTypeUnknown AccountType = iota
-	AccountTypeDirect
-	AccountTypeReseller
-)
-
-func (a AccountType) String() string {
-	return [...]string{"direct", "reseller"}[a]
-}
-
 // Record is ads.txt data field defined in iab.
 type Record struct {
 	// ExchangeDomain is domain name of the advertising system
@@ -31,7 +18,7 @@ type Record struct {
 	PublisherAccountID string `json:"publisher_account_id"`
 
 	// AccountType is an enumeration of the type of account.
-	AccountType AccountType `json:"account_type"`
+	AccountType string `json:"account_type"`
 
 	// AuthorityID is an ID that uniquely identifies the advertising system
 	// within a certification authority.
@@ -77,7 +64,7 @@ func parseRow(row string) (Record, error) {
 	}
 
 	for i := range fields {
-		fields[i] = strings.ToLower(strings.TrimSpace(fields[i]))
+		fields[i] = strings.TrimSpace(fields[i])
 	}
 
 	var r Record
@@ -85,11 +72,10 @@ func parseRow(row string) (Record, error) {
 	r.PublisherAccountID = fields[1]
 
 	if len(fields) >= 3 {
-		accountType := parseAccountType(fields[2])
-		if accountType == AccountTypeUnknown {
-			return r, fmt.Errorf("account type is %q and must be (DIRECT or RESELLER)", fields[2])
+		if !verifyAccountType(fields[2]) {
+			return r, fmt.Errorf("account type is %q and must be DIRECT or RESELLER", fields[2])
 		}
-		r.AccountType = accountType
+		r.AccountType = fields[2]
 	}
 
 	// AuthorityID is optional
@@ -99,12 +85,7 @@ func parseRow(row string) (Record, error) {
 	return r, nil
 }
 
-func parseAccountType(s string) AccountType {
-	switch s {
-	case "direct":
-		return AccountTypeDirect
-	case "reseller":
-		return AccountTypeReseller
-	}
-	return AccountTypeUnknown
+func verifyAccountType(s string) bool {
+	s = strings.ToLower(s)
+	return s == "direct" || s == "reseller"
 }
