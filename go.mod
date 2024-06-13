@@ -1,11 +1,18 @@
 module github.com/qmerce/adstxt
 
+go 1.22.4
+
 require (
 	github.com/bluele/slack v0.0.0-20180528010058-b4b4d354a079
-	github.com/buger/jsonparser v0.0.0-20180808090653-f4dd9f5a6b44 // indirect
+	github.com/mongodb/mongo-go-driver v0.0.16
+)
+
+require (
 	github.com/go-stack/stack v1.7.0 // indirect
 	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
-	github.com/mongodb/mongo-go-driver v0.0.16
+	github.com/google/go-cmp v0.3.0 // indirect
+	github.com/stretchr/testify v1.3.0 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c // indirect
 	github.com/xdg/stringprep v1.0.0 // indirect
 	golang.org/x/crypto v0.0.0-20180816225734-aabede6cba87 // indirect

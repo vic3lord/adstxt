@@ -2,7 +2,9 @@ package adstxt
 
 import (
 	"bufio"
+	"fmt"
 	"io"
+	"net/http"
 	"strings"
 )
 
@@ -32,47 +34,6 @@ const (
 	AccountOther
 )
 
-func parseAccountType(s string) AccountType {
-	switch s {
-	case "direct":
-		return AccountDirect
-	case "reseller":
-		return AccountReseller
-	default:
-		return AccountOther
-	}
-}
-
-func sanitize(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
-}
-
-func parseRow(row string) (Record, error) {
-	comment := strings.Index(row, "#")
-	if comment != -1 {
-		row = row[:comment]
-	}
-	fields := strings.Split(row, ",")
-
-	if len(fields) < 2 || len(fields) > 4 {
-		return Record{}, nil
-	}
-
-	var r Record
-	r.ExchangeDomain = sanitize(fields[0])
-	r.PublisherAccountID = sanitize(fields[1])
-
-	if len(fields) >= 3 {
-		r.AccountType = parseAccountType(fields[2])
-	}
-
-	// AuthorityID is optional
-	if len(fields) == 4 {
-		r.AuthorityID = sanitize(fields[3])
-	}
-	return r, nil
-}
-
 // Parse takes a text and returns a slice of Records
 func Parse(in io.Reader) ([]Record, error) {
 	records := make([]Record, 0)
@@ -88,4 +49,51 @@ func Parse(in io.Reader) ([]Record, error) {
 		records = append(records, r)
 	}
 	return records, scanner.Err()
+}
+
+// ParseFromURL takes a url and returns a slice of Records
+func ParseFromURL(url string) ([]Record, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("could not get ads.txt from url: %w", err)
+	}
+	defer resp.Body.Close()
+	return Parse(resp.Body)
+}
+
+func parseAccountType(s string) AccountType {
+	switch s {
+	case "direct":
+		return AccountDirect
+	case "reseller":
+		return AccountReseller
+	default:
+		return AccountOther
+	}
+}
+
+func parseRow(row string) (Record, error) {
+	comment := strings.Index(row, "#")
+	if comment != -1 {
+		row = row[:comment]
+	}
+
+	fields := strings.Split(row, ",")
+	if len(fields) < 2 || len(fields) > 4 {
+		return Record{}, nil
+	}
+
+	var r Record
+	r.ExchangeDomain = strings.ToLower(fields[0])
+	r.PublisherAccountID = strings.ToLower(fields[1])
+
+	if len(fields) >= 3 {
+		r.AccountType = parseAccountType(strings.ToLower(fields[2]))
+	}
+
+	// AuthorityID is optional
+	if len(fields) == 4 {
+		r.AuthorityID = strings.ToLower(fields[3])
+	}
+	return r, nil
 }
